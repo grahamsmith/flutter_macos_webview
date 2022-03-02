@@ -9,7 +9,7 @@ import Cocoa
 import FlutterMacOS
 import WebKit
 
-class WebViewController: NSViewController {
+class WebViewController: NSViewController, WKHTTPCookieStoreObserver {
     enum PresentationStyle: Int {
         case modal = 0
         case sheet = 1
@@ -20,10 +20,13 @@ class WebViewController: NSViewController {
     private let webview: WKWebView
     
     private let frame: CGRect
+    private let websiteDataStore = WKWebsiteDataStore.nonPersistent()
     private let channel: FlutterMethodChannel
     private let presentationStyle: PresentationStyle
     private let modalTitle: String!
     private let sheetCloseButtonTitle: String
+    
+    var timer: Timer?
     
     var javascriptEnabled: Bool {
         set { webview.configuration.preferences.javaScriptEnabled = newValue }
@@ -53,13 +56,46 @@ class WebViewController: NSViewController {
         self.presentationStyle = presentationStyle
         self.modalTitle = modalTitle
         self.sheetCloseButtonTitle = sheetCloseButtonTitle
-        
-        webview = WKWebView()
-        
+
+        // WKWebViewConfiguration
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = websiteDataStore
+
+
+        webview = WKWebView(frame: frame, configuration: configuration)
+
         super.init(nibName: nil, bundle: nil)
+
+        websiteDataStore.httpCookieStore.add(self)
         
         webview.navigationDelegate = self
         webview.uiDelegate = self
+        
+        timer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { (timer) in
+               // Do what you need to do repeatedly
+            self.websiteDataStore.httpCookieStore.getAllCookies { (cookies) in
+
+                print("Cookies: GOT THE COOKIES")
+                let cookieDict = cookies.map { (cookie) -> [String: Any] in
+                    return [
+                        "name": cookie.name,
+                        "value": cookie.value,
+                        "domain": cookie.domain,
+                        "path": cookie.path,
+                        "expires": cookie.expiresDate?.timeIntervalSince1970 ?? 0,
+                        "secure": cookie.isSecure,
+                        "httpOnly": cookie.isHTTPOnly,
+                        "session": cookie.isSessionOnly
+                    ]}
+
+                self.channel.invokeMethod("onCookiesRetrieved", arguments: [ "cookies": cookieDict ])
+            }
+        }
+    }
+
+    func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        print("COOKIES DID CHANGE")
+        channel.invokeMethod("CookiesDidChange", arguments: [ "test": "test" ])
     }
     
     required init?(coder: NSCoder) {
@@ -171,6 +207,7 @@ extension WebViewController: WKNavigationDelegate {
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let url = webView.url?.absoluteString else { return }
+
         channel.invokeMethod("onPageFinished", arguments: [ "url": url ])
     }
     

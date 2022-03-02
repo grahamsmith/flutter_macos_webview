@@ -31,6 +31,7 @@ class FlutterMacOSWebView {
     this.onClose,
     this.onPageStarted,
     this.onPageFinished,
+    this.onCookiesRetrieved,
     this.onWebResourceError,
   }) : _channel = MethodChannel(_kChannel) {
     _channel.setMethodCallHandler(_onMethodCall);
@@ -42,6 +43,7 @@ class FlutterMacOSWebView {
   final void Function()? onClose;
   final void Function(String? url)? onPageStarted;
   final void Function(String? url)? onPageFinished;
+  final void Function(List<Cookie> cookies, FlutterMacOSWebView webView)? onCookiesRetrieved;
   final void Function(WebResourceError error)? onWebResourceError;
 
   /// Opens WebView with specified params
@@ -110,6 +112,11 @@ class FlutterMacOSWebView {
       case 'onPageFinished':
         onPageFinished?.call(call.arguments['url']);
         return;
+      case 'onCookiesRetrieved':
+        final args = call.arguments['cookies'] as List<dynamic>;
+        final List<Cookie> cookies = args.map((e) => Cookie.fromMap(e)).toList();
+        onCookiesRetrieved?.call(cookies, this);
+        return;
       case 'onWebResourceError':
         onWebResourceError?.call(
           WebResourceError(
@@ -120,14 +127,45 @@ class FlutterMacOSWebView {
                 ? null
                 : WebResourceErrorType.values.firstWhere(
                     (type) {
-                      return type.toString() ==
-                          '$WebResourceErrorType.${call.arguments['errorType']}';
+                      return type.toString() == '$WebResourceErrorType.${call.arguments['errorType']}';
                     },
                   ),
           ),
         );
         return;
     }
+  }
+}
+
+class Cookie {
+  final String name;
+  final String domain;
+  final String path;
+  final String value;
+  final double expires;
+  final bool secure;
+  final bool session;
+
+  Cookie({
+    required this.name,
+    required this.domain,
+    required this.path,
+    required this.value,
+    required this.expires,
+    required this.secure,
+    required this.session,
+  });
+
+  factory Cookie.fromMap(dynamic map) {
+    return Cookie(
+      name: map['name'],
+      domain: map['domain'],
+      path: map['path'],
+      value: map['value'],
+      expires: map['expires'] as double,
+      secure: map['secure'] as bool,
+      session: map['session'] as bool,
+    );
   }
 }
 
