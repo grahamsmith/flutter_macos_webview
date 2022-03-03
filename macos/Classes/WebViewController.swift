@@ -9,7 +9,7 @@ import Cocoa
 import FlutterMacOS
 import WebKit
 
-class WebViewController: NSViewController, WKHTTPCookieStoreObserver {
+class WebViewController: NSViewController {
     enum PresentationStyle: Int {
         case modal = 0
         case sheet = 1
@@ -66,12 +66,10 @@ class WebViewController: NSViewController, WKHTTPCookieStoreObserver {
 
         super.init(nibName: nil, bundle: nil)
 
-        websiteDataStore.httpCookieStore.add(self)
-        
         webview.navigationDelegate = self
         webview.uiDelegate = self
         
-        timer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { (timer) in
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { (timer) in
                // Do what you need to do repeatedly
             self.websiteDataStore.httpCookieStore.getAllCookies { (cookies) in
 
@@ -93,11 +91,6 @@ class WebViewController: NSViewController, WKHTTPCookieStoreObserver {
         }
     }
 
-    func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
-        print("COOKIES DID CHANGE")
-        channel.invokeMethod("CookiesDidChange", arguments: [ "test": "test" ])
-    }
-    
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -178,7 +171,15 @@ class WebViewController: NSViewController, WKHTTPCookieStoreObserver {
     }
     
     override func viewDidAppear() {
+        super.viewDidAppear()
         view.window?.delegate = self
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        guard timer != nil else { return }
+            timer?.invalidate()
+            timer = nil
     }
 }
 
@@ -207,7 +208,6 @@ extension WebViewController: WKNavigationDelegate {
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let url = webView.url?.absoluteString else { return }
-
         channel.invokeMethod("onPageFinished", arguments: [ "url": url ])
     }
     
