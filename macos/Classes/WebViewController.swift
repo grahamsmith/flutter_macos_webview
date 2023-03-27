@@ -20,10 +20,13 @@ class WebViewController: NSViewController {
     private let webview: WKWebView
     
     private let frame: CGRect
+    private let websiteDataStore = WKWebsiteDataStore.nonPersistent()
     private let channel: FlutterMethodChannel
     private let presentationStyle: PresentationStyle
     private let modalTitle: String!
     private let sheetCloseButtonTitle: String
+    
+    var timer: Timer?
     
     var javascriptEnabled: Bool {
         set { webview.configuration.preferences.javaScriptEnabled = newValue }
@@ -53,15 +56,41 @@ class WebViewController: NSViewController {
         self.presentationStyle = presentationStyle
         self.modalTitle = modalTitle
         self.sheetCloseButtonTitle = sheetCloseButtonTitle
-        
-        webview = WKWebView()
-        
+
+        // WKWebViewConfiguration
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = websiteDataStore
+
+
+        webview = WKWebView(frame: frame, configuration: configuration)
+
         super.init(nibName: nil, bundle: nil)
-        
+
         webview.navigationDelegate = self
         webview.uiDelegate = self
+        
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { (timer) in
+               // Do what you need to do repeatedly
+            self.websiteDataStore.httpCookieStore.getAllCookies { (cookies) in
+
+                print("Cookies: GOT THE COOKIES")
+                let cookieDict = cookies.map { (cookie) -> [String: Any] in
+                    return [
+                        "name": cookie.name,
+                        "value": cookie.value,
+                        "domain": cookie.domain,
+                        "path": cookie.path,
+                        "expires": cookie.expiresDate?.timeIntervalSince1970 ?? 0,
+                        "secure": cookie.isSecure,
+                        "httpOnly": cookie.isHTTPOnly,
+                        "session": cookie.isSessionOnly
+                    ]}
+
+                self.channel.invokeMethod("onCookiesRetrieved", arguments: [ "cookies": cookieDict ])
+            }
+        }
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -142,7 +171,15 @@ class WebViewController: NSViewController {
     }
     
     override func viewDidAppear() {
+        super.viewDidAppear()
         view.window?.delegate = self
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        guard timer != nil else { return }
+            timer?.invalidate()
+            timer = nil
     }
 }
 
